@@ -12,6 +12,19 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+        @ExceptionHandler(AccountEntitlementNotFoundException.class)
+public ResponseEntity<Map<String, String>> handleAccountEntitlementNotFound(
+        AccountEntitlementNotFoundException exception) {
+
+    Map<String, String> errorResponse = Map.of(
+            "error", "Account Entitlement Not Found",
+            "message", exception.getMessage()
+    );
+
+    return ResponseEntity
+            .status(HttpStatus.NOT_FOUND)
+            .body(errorResponse);
+}
     @ExceptionHandler(EmployeeNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleEmployeeNotFound(
             EmployeeNotFoundException exception) {
@@ -40,6 +53,20 @@ public class GlobalExceptionHandler {
                 .body(errorResponse);
     }
 
+    @ExceptionHandler(ApplicationNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleApplicationNotFound(
+            ApplicationNotFoundException exception) {
+
+        Map<String, String> errorResponse = Map.of(
+                "error", "Application Not Found",
+                "message", exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(errorResponse);
+    }
+
     @ExceptionHandler(DuplicateApplicationException.class)
     public ResponseEntity<Map<String, String>> handleDuplicateApplication(
             DuplicateApplicationException exception) {
@@ -54,12 +81,12 @@ public class GlobalExceptionHandler {
                 .body(errorResponse);
     }
 
-    @ExceptionHandler(ApplicationNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleApplicationNotFound(
-            ApplicationNotFoundException exception) {
+    @ExceptionHandler(AccountNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleAccountNotFound(
+            AccountNotFoundException exception) {
 
         Map<String, String> errorResponse = Map.of(
-                "error", "Application Not Found",
+                "error", "Account Not Found",
                 "message", exception.getMessage()
         );
 
@@ -82,17 +109,60 @@ public class GlobalExceptionHandler {
                 .body(errorResponse);
     }
 
-    @ExceptionHandler(AccountNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleAccountNotFound(
-            AccountNotFoundException exception) {
+    @ExceptionHandler(EntitlementNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleEntitlementNotFound(
+            EntitlementNotFoundException exception) {
 
         Map<String, String> errorResponse = Map.of(
-                "error", "Account Not Found",
+                "error", "Entitlement Not Found",
                 "message", exception.getMessage()
         );
 
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(DuplicateEntitlementException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateEntitlement(
+            DuplicateEntitlementException exception) {
+
+        Map<String, String> errorResponse = Map.of(
+                "error", "Duplicate Entitlement",
+                "message", exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(DuplicateAccountEntitlementException.class)
+    public ResponseEntity<Map<String, String>>
+            handleDuplicateAccountEntitlement(
+                    DuplicateAccountEntitlementException exception) {
+
+        Map<String, String> errorResponse = Map.of(
+                "error", "Duplicate Account Entitlement",
+                "message", exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(ApplicationMismatchException.class)
+    public ResponseEntity<Map<String, String>> handleApplicationMismatch(
+            ApplicationMismatchException exception) {
+
+        Map<String, String> errorResponse = Map.of(
+                "error", "Application Mismatch",
+                "message", exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
                 .body(errorResponse);
     }
 
