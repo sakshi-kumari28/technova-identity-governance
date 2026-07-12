@@ -68,6 +68,34 @@ public class GlobalExceptionHandler {
                 .body(errorResponse);
     }
 
+    @ExceptionHandler(DuplicateAccountException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateAccount(
+            DuplicateAccountException exception) {
+
+        Map<String, String> errorResponse = Map.of(
+                "error", "Duplicate Account",
+                "message", exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(AccountNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleAccountNotFound(
+            AccountNotFoundException exception) {
+
+        Map<String, String> errorResponse = Map.of(
+                "error", "Account Not Found",
+                "message", exception.getMessage()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(errorResponse);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationErrors(
             MethodArgumentNotValidException exception) {
