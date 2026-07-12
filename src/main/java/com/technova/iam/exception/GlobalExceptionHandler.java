@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // ==================== EMPLOYEE EXCEPTIONS ====================
+
     @ExceptionHandler(EmployeeNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleEmployeeNotFound(
             EmployeeNotFoundException exception) {
@@ -35,6 +37,8 @@ public class GlobalExceptionHandler {
                         "message", exception.getMessage()
                 ));
     }
+
+    // ==================== APPLICATION EXCEPTIONS ====================
 
     @ExceptionHandler(ApplicationNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleApplicationNotFound(
@@ -60,6 +64,20 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(ApplicationMismatchException.class)
+    public ResponseEntity<Map<String, String>> handleApplicationMismatch(
+            ApplicationMismatchException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                        "error", "Application Mismatch",
+                        "message", exception.getMessage()
+                ));
+    }
+
+    // ==================== ACCOUNT EXCEPTIONS ====================
+
     @ExceptionHandler(AccountNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleAccountNotFound(
             AccountNotFoundException exception) {
@@ -83,6 +101,8 @@ public class GlobalExceptionHandler {
                         "message", exception.getMessage()
                 ));
     }
+
+    // ==================== ENTITLEMENT EXCEPTIONS ====================
 
     @ExceptionHandler(EntitlementNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleEntitlementNotFound(
@@ -108,10 +128,11 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    // ==================== ACCOUNT ENTITLEMENT EXCEPTIONS ====================
+
     @ExceptionHandler(DuplicateAccountEntitlementException.class)
-    public ResponseEntity<Map<String, String>>
-            handleDuplicateAccountEntitlement(
-                    DuplicateAccountEntitlementException exception) {
+    public ResponseEntity<Map<String, String>> handleDuplicateAccountEntitlement(
+            DuplicateAccountEntitlementException exception) {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
@@ -122,9 +143,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(AccountEntitlementNotFoundException.class)
-    public ResponseEntity<Map<String, String>>
-            handleAccountEntitlementNotFound(
-                    AccountEntitlementNotFoundException exception) {
+    public ResponseEntity<Map<String, String>> handleAccountEntitlementNotFound(
+            AccountEntitlementNotFoundException exception) {
 
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
@@ -134,17 +154,7 @@ public class GlobalExceptionHandler {
                 ));
     }
 
-    @ExceptionHandler(ApplicationMismatchException.class)
-    public ResponseEntity<Map<String, String>> handleApplicationMismatch(
-            ApplicationMismatchException exception) {
-
-        return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(Map.of(
-                        "error", "Application Mismatch",
-                        "message", exception.getMessage()
-                ));
-    }
+    // ==================== ACCESS REQUEST EXCEPTIONS ====================
 
     @ExceptionHandler(AccessRequestNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleAccessRequestNotFound(
@@ -159,9 +169,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(InvalidAccessRequestDecisionException.class)
-    public ResponseEntity<Map<String, String>>
-            handleInvalidAccessRequestDecision(
-                    InvalidAccessRequestDecisionException exception) {
+    public ResponseEntity<Map<String, String>> handleInvalidAccessRequestDecision(
+            InvalidAccessRequestDecisionException exception) {
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
@@ -172,9 +181,8 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(AccessRequestAlreadyReviewedException.class)
-    public ResponseEntity<Map<String, String>>
-            handleAccessRequestAlreadyReviewed(
-                    AccessRequestAlreadyReviewedException exception) {
+    public ResponseEntity<Map<String, String>> handleAccessRequestAlreadyReviewed(
+            AccessRequestAlreadyReviewedException exception) {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
@@ -195,6 +203,34 @@ public class GlobalExceptionHandler {
                         "message", exception.getMessage()
                 ));
     }
+
+    // ==================== LIFECYCLE EVENT EXCEPTIONS ====================
+
+    @ExceptionHandler(InvalidLifecycleEventTypeException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidLifecycleEventType(
+            InvalidLifecycleEventTypeException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                        "error", "Invalid Lifecycle Event Type",
+                        "message", exception.getMessage()
+                ));
+    }
+
+    @ExceptionHandler(LifecycleEventNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleLifecycleEventNotFound(
+            LifecycleEventNotFoundException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(Map.of(
+                        "error", "Lifecycle Event Not Found",
+                        "message", exception.getMessage()
+                ));
+    }
+
+    // ==================== VALIDATION EXCEPTIONS ====================
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationErrors(
