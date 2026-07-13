@@ -1,6 +1,7 @@
 package com.technova.iam.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -14,5 +15,12 @@ public interface AccountEntitlementRepository
             Long entitlementId
     );
 
-    List<AccountEntitlement> findByAccountId(Long accountId);
+    Optional<AccountEntitlement> findByAccountIdAndEntitlementId(
+            Long accountId,
+            Long entitlementId
+    );
+
+    List<AccountEntitlement> findByAccountId(
+            Long accountId
+    );
 }
