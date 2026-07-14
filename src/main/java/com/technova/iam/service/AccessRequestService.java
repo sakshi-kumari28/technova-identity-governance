@@ -2,6 +2,7 @@ package com.technova.iam.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,25 +37,33 @@ public class AccessRequestService {
     private final AccountRepository accountRepository;
     private final EntitlementRepository entitlementRepository;
     private final AccountEntitlementRepository accountEntitlementRepository;
+    private final AuditEventService auditEventService;
 
     public AccessRequestService(
             AccessRequestRepository accessRequestRepository,
             EmployeeRepository employeeRepository,
             AccountRepository accountRepository,
             EntitlementRepository entitlementRepository,
-            AccountEntitlementRepository accountEntitlementRepository) {
+            AccountEntitlementRepository accountEntitlementRepository,
+            AuditEventService auditEventService) {
 
         this.accessRequestRepository = accessRequestRepository;
         this.employeeRepository = employeeRepository;
         this.accountRepository = accountRepository;
         this.entitlementRepository = entitlementRepository;
-        this.accountEntitlementRepository = accountEntitlementRepository;
+        this.accountEntitlementRepository =
+                accountEntitlementRepository;
+        this.auditEventService = auditEventService;
     }
 
+    // =========================================================
+    // CREATE ACCESS REQUEST
+    // =========================================================
+
+    @Transactional
     public AccessRequest createAccessRequest(
             CreateAccessRequest request) {
 
-        // Step 1: Validate employee
         Employee employee = employeeRepository
                 .findById(request.getEmployeeId())
                 .orElseThrow(() ->
@@ -63,7 +72,6 @@ public class AccessRequestService {
                         )
                 );
 
-        // Step 2: Validate account
         Account account = accountRepository
                 .findById(request.getAccountId())
                 .orElseThrow(() ->
@@ -73,7 +81,6 @@ public class AccessRequestService {
                         )
                 );
 
-        // Step 3: Validate entitlement
         Entitlement entitlement = entitlementRepository
                 .findById(request.getEntitlementId())
                 .orElseThrow(() ->
@@ -83,7 +90,7 @@ public class AccessRequestService {
                         )
                 );
 
-        // Step 4: Validate account ownership
+        // Validate account ownership
         if (!account.getEmployee()
                 .getId()
                 .equals(employee.getId())) {
@@ -93,88 +100,132 @@ public class AccessRequestService {
             );
         }
 
-        // Step 5: Validate application match
+        // Validate application match
         if (!account.getTargetApplication()
                 .getId()
                 .equals(
-                        entitlement.getTargetApplication().getId()
+                        entitlement
+                                .getTargetApplication()
+                                .getId()
                 )) {
 
             throw new ApplicationMismatchException(
-                    "Account and entitlement must belong to the same application"
+                    "Account and entitlement must belong "
+                            + "to the same application"
             );
         }
 
-        // Step 6: Prevent duplicate PENDING requests
+        // Prevent duplicate pending requests
         if (accessRequestRepository
                 .existsByAccountIdAndEntitlementIdAndStatus(
-                        request.getAccountId(),
-                        request.getEntitlementId(),
-                        "PENDING")) {
+                        account.getId(),
+                        entitlement.getId(),
+                        "PENDING"
+                )) {
 
             throw new DuplicateAccessRequestException(
-                    "A pending access request already exists for account "
-                            + request.getAccountId()
+                    "A pending access request already exists "
+                            + "for account "
+                            + account.getId()
                             + " and entitlement "
-                            + request.getEntitlementId()
+                            + entitlement.getId()
             );
         }
 
-        // Step 7: Create access request
-        AccessRequest accessRequest = new AccessRequest();
+        AccessRequest accessRequest =
+                new AccessRequest();
 
         accessRequest.setEmployee(employee);
         accessRequest.setAccount(account);
         accessRequest.setEntitlement(entitlement);
-        accessRequest.setJustification(request.getJustification());
+        accessRequest.setJustification(
+                request.getJustification()
+        );
         accessRequest.setStatus("PENDING");
-        accessRequest.setRequestedAt(LocalDateTime.now());
+        accessRequest.setRequestedAt(
+                LocalDateTime.now()
+        );
 
-        // Step 8: Save access request
-        return accessRequestRepository.save(accessRequest);
+        accessRequest =
+                accessRequestRepository.save(
+                        accessRequest
+                );
+
+        // =====================================================
+        // AUDIT: REQUEST CREATED
+        // =====================================================
+
+        auditEventService.createAuditEvent(
+                "ACCESS_REQUEST",
+                "ACCESS_REQUEST",
+                accessRequest.getId(),
+                "ACCESS_REQUEST_CREATED",
+                "Access requested for entitlement "
+                        + entitlement.getEntitlementName()
+                        + " on account "
+                        + account.getId()
+                        + " by employee "
+                        + employee.getId(),
+                "SYSTEM"
+        );
+
+        return accessRequest;
     }
+
+    // =========================================================
+    // GET ALL ACCESS REQUESTS
+    // =========================================================
 
     public List<AccessRequest> getAllAccessRequests() {
 
         return accessRequestRepository.findAll();
     }
 
-    public AccessRequest getAccessRequestById(Long id) {
+    // =========================================================
+    // GET ACCESS REQUEST BY ID
+    // =========================================================
+
+    public AccessRequest getAccessRequestById(
+            Long id) {
 
         return accessRequestRepository
                 .findById(id)
                 .orElseThrow(() ->
                         new AccessRequestNotFoundException(
-                                "Access request not found with id: " + id
+                                "Access request not found with id: "
+                                        + id
                         )
                 );
     }
+
+    // =========================================================
+    // REVIEW ACCESS REQUEST
+    // =========================================================
 
     @Transactional
     public AccessRequest reviewAccessRequest(
             Long id,
             ReviewAccessRequest request) {
 
-        // Step 1: Find access request
         AccessRequest accessRequest =
                 getAccessRequestById(id);
 
-        // Step 2: Prevent reviewing completed requests
-        if (!"PENDING".equals(accessRequest.getStatus())) {
+        if (!"PENDING".equals(
+                accessRequest.getStatus())) {
 
             throw new AccessRequestAlreadyReviewedException(
-                    "Access request has already been reviewed with status: "
+                    "Access request has already been "
+                            + "reviewed with status: "
                             + accessRequest.getStatus()
             );
         }
 
-        // Step 3: Normalize decision
-        String decision = request
-                .getDecision()
-                .trim()
-                .toUpperCase();
+        String decision =
+                request
+                        .getDecision()
+                        .trim()
+                        .toUpperCase();
 
-        // Step 4: Validate decision
         if (!"APPROVED".equals(decision)
                 && !"REJECTED".equals(decision)) {
 
@@ -183,45 +234,169 @@ public class AccessRequestService {
             );
         }
 
-        // Step 5: Provision access when approved
+        // =====================================================
+        // APPROVED
+        // =====================================================
+
         if ("APPROVED".equals(decision)) {
 
-            Long accountId =
-                    accessRequest.getAccount().getId();
+            provisionAccess(accessRequest);
+        }
 
-            Long entitlementId =
-                    accessRequest.getEntitlement().getId();
+        // =====================================================
+        // UPDATE REQUEST
+        // =====================================================
 
-            // Prevent duplicate assignment
-            if (accountEntitlementRepository
-                    .existsByAccountIdAndEntitlementId(
-                            accountId,
-                            entitlementId)) {
+        accessRequest.setStatus(decision);
+
+        accessRequest.setReviewedAt(
+                LocalDateTime.now()
+        );
+
+        accessRequest.setReviewComment(
+                request.getReviewComment()
+        );
+
+        accessRequest =
+                accessRequestRepository.save(
+                        accessRequest
+                );
+
+        // =====================================================
+        // AUDIT: REVIEW DECISION
+        // =====================================================
+
+        if ("APPROVED".equals(decision)) {
+
+            auditEventService.createAuditEvent(
+                    "ACCESS_REQUEST",
+                    "ACCESS_REQUEST",
+                    accessRequest.getId(),
+                    "ACCESS_REQUEST_APPROVED",
+                    "Access request "
+                            + accessRequest.getId()
+                            + " approved for entitlement "
+                            + accessRequest
+                                    .getEntitlement()
+                                    .getEntitlementName(),
+                    "SYSTEM"
+            );
+
+        } else {
+
+            auditEventService.createAuditEvent(
+                    "ACCESS_REQUEST",
+                    "ACCESS_REQUEST",
+                    accessRequest.getId(),
+                    "ACCESS_REQUEST_REJECTED",
+                    "Access request "
+                            + accessRequest.getId()
+                            + " rejected for entitlement "
+                            + accessRequest
+                                    .getEntitlement()
+                                    .getEntitlementName(),
+                    "SYSTEM"
+            );
+        }
+
+        return accessRequest;
+    }
+
+    // =========================================================
+    // PROVISION ACCESS
+    // =========================================================
+
+    private void provisionAccess(
+            AccessRequest accessRequest) {
+
+        Account account =
+                accessRequest.getAccount();
+
+        Entitlement entitlement =
+                accessRequest.getEntitlement();
+
+        Optional<AccountEntitlement>
+                existingAssignment =
+
+                accountEntitlementRepository
+                        .findByAccountIdAndEntitlementId(
+                                account.getId(),
+                                entitlement.getId()
+                        );
+
+        // =====================================================
+        // EXISTING ASSIGNMENT
+        // =====================================================
+
+        if (existingAssignment.isPresent()) {
+
+            AccountEntitlement accountEntitlement =
+                    existingAssignment.get();
+
+            if (accountEntitlement.isActive()) {
 
                 throw new DuplicateAccountEntitlementException(
                         "Entitlement "
-                                + entitlementId
-                                + " is already assigned to account "
-                                + accountId
+                                + entitlement.getId()
+                                + " is already active for account "
+                                + account.getId()
                 );
             }
 
-            AccountEntitlement assignment =
-                    new AccountEntitlement();
+            accountEntitlement.setActive(true);
 
-            assignment.setAccount(accessRequest.getAccount());
-            assignment.setEntitlement(accessRequest.getEntitlement());
-            assignment.setActive(true);
+            accountEntitlement =
+                    accountEntitlementRepository.save(
+                            accountEntitlement
+                    );
 
-            accountEntitlementRepository.save(assignment);
+            auditEventService.createAuditEvent(
+                    "PROVISIONING",
+                    "ACCOUNT_ENTITLEMENT",
+                    accountEntitlement.getId(),
+                    "ENTITLEMENT_REACTIVATED",
+                    entitlement.getEntitlementName()
+                            + " reactivated for account "
+                            + account.getId()
+                            + " through access request "
+                            + accessRequest.getId(),
+                    "SYSTEM"
+            );
+
+            return;
         }
 
-        // Step 6: Update review information
-        accessRequest.setStatus(decision);
-        accessRequest.setReviewedAt(LocalDateTime.now());
-        accessRequest.setReviewComment(request.getReviewComment());
+        // =====================================================
+        // NEW ASSIGNMENT
+        // =====================================================
 
-        // Step 7: Save updated request
-        return accessRequestRepository.save(accessRequest);
+        AccountEntitlement accountEntitlement =
+                new AccountEntitlement();
+
+        accountEntitlement.setAccount(account);
+
+        accountEntitlement.setEntitlement(
+                entitlement
+        );
+
+        accountEntitlement.setActive(true);
+
+        accountEntitlement =
+                accountEntitlementRepository.save(
+                        accountEntitlement
+                );
+
+        auditEventService.createAuditEvent(
+                "PROVISIONING",
+                "ACCOUNT_ENTITLEMENT",
+                accountEntitlement.getId(),
+                "ENTITLEMENT_PROVISIONED",
+                entitlement.getEntitlementName()
+                        + " provisioned to account "
+                        + account.getId()
+                        + " through access request "
+                        + accessRequest.getId(),
+                "SYSTEM"
+        );
     }
 }
