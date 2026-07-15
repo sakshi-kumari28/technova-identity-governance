@@ -155,19 +155,19 @@ public class AccessRequestService {
         // AUDIT: REQUEST CREATED
         // =====================================================
 
-        auditEventService.createAuditEvent(
-                "ACCESS_REQUEST",
-                "ACCESS_REQUEST",
-                accessRequest.getId(),
-                "ACCESS_REQUEST_CREATED",
-                "Access requested for entitlement "
-                        + entitlement.getEntitlementName()
-                        + " on account "
-                        + account.getId()
-                        + " by employee "
-                        + employee.getId(),
-                "SYSTEM"
-        );
+      auditEventService.createAuditEvent(
+        "ACCESS_REQUEST",
+        "ACCESS_REQUEST",
+        accessRequest.getId(),
+        "ACCESS_REQUEST_REJECTED",
+        "Access request "
+                + accessRequest.getId()
+                + " rejected for entitlement "
+                + accessRequest
+                        .getEntitlement()
+                        .getEntitlementName(),
+        "SYSTEM"
+         );
 
         return accessRequest;
     }
@@ -269,18 +269,18 @@ public class AccessRequestService {
         if ("APPROVED".equals(decision)) {
 
             auditEventService.createAuditEvent(
-                    "ACCESS_REQUEST",
-                    "ACCESS_REQUEST",
-                    accessRequest.getId(),
-                    "ACCESS_REQUEST_APPROVED",
-                    "Access request "
-                            + accessRequest.getId()
-                            + " approved for entitlement "
-                            + accessRequest
-                                    .getEntitlement()
-                                    .getEntitlementName(),
-                    "SYSTEM"
-            );
+        "ACCESS_REQUEST",
+        "ACCESS_REQUEST",
+        accessRequest.getId(),
+        "ACCESS_REQUEST_REJECTED",
+        "Access request "
+                + accessRequest.getId()
+                + " rejected for entitlement "
+                + accessRequest
+                        .getEntitlement()
+                        .getEntitlementName(),
+        "SYSTEM"
+);
 
         } else {
 

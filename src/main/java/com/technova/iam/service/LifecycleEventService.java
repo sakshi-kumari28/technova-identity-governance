@@ -28,17 +28,21 @@ public class LifecycleEventService {
     private final EmployeeRepository employeeRepository;
     private final AccountRepository accountRepository;
     private final AccountEntitlementRepository accountEntitlementRepository;
+    private final AuditEventService auditEventService;
 
     public LifecycleEventService(
             LifecycleEventRepository lifecycleEventRepository,
             EmployeeRepository employeeRepository,
             AccountRepository accountRepository,
-            AccountEntitlementRepository accountEntitlementRepository) {
+            AccountEntitlementRepository accountEntitlementRepository,
+            AuditEventService auditEventService) {
 
         this.lifecycleEventRepository = lifecycleEventRepository;
         this.employeeRepository = employeeRepository;
         this.accountRepository = accountRepository;
-        this.accountEntitlementRepository = accountEntitlementRepository;
+        this.accountEntitlementRepository =
+                accountEntitlementRepository;
+        this.auditEventService = auditEventService;
     }
 
     // =========================================================
@@ -49,7 +53,6 @@ public class LifecycleEventService {
     public LifecycleEvent createLifecycleEvent(
             CreateLifecycleEventRequest request) {
 
-        // Step 1: Find employee
         Employee employee = employeeRepository
                 .findById(request.getEmployeeId())
                 .orElseThrow(() ->
@@ -58,65 +61,136 @@ public class LifecycleEventService {
                         )
                 );
 
-        // Step 2: Normalize event type
-        String eventType = request
-                .getEventType()
-                .trim()
-                .toUpperCase();
+       // Step 2: Normalize event type
+String eventType = request
+        .getEventType()
+        .trim()
+        .toUpperCase();
 
-        // Step 3: Only JOINER and LEAVER are allowed here
-        if (!"JOINER".equals(eventType)
-                && !"LEAVER".equals(eventType)) {
+// Step 3: Validate event type
+if (!"JOINER".equals(eventType)
+        && !"LEAVER".equals(eventType)) {
 
-            throw new InvalidLifecycleEventTypeException(
-                    "Event type must be JOINER or LEAVER. "
-                            + "Use /api/lifecycle-events/mover "
-                            + "for MOVER events"
-            );
-        }
+    throw new InvalidLifecycleEventTypeException(
+            "Event type must be JOINER or LEAVER. "
+                    + "Use /api/lifecycle-events/mover "
+                    + "for MOVER events"
+    );
+}
 
-        // Step 4: Create lifecycle event
-        LifecycleEvent lifecycleEvent = new LifecycleEvent();
+// Step 4: Prevent duplicate JOINER
+if ("JOINER".equals(eventType)
+        && employee.getStatus() == EmployeeStatus.ACTIVE) {
+
+    throw new IllegalStateException(
+            "Employee is already ACTIVE."
+    );
+}
+
+// Step 5: Prevent duplicate LEAVER
+if ("LEAVER".equals(eventType)
+        && employee.getStatus() == EmployeeStatus.INACTIVE) {
+
+    throw new IllegalStateException(
+            "Employee is already INACTIVE."
+    );
+}
+
+        LifecycleEvent lifecycleEvent =
+                new LifecycleEvent();
 
         lifecycleEvent.setEmployee(employee);
         lifecycleEvent.setEventType(eventType);
         lifecycleEvent.setStatus("IN_PROGRESS");
-        lifecycleEvent.setDescription(request.getDescription());
-        lifecycleEvent.setCreatedAt(LocalDateTime.now());
+        lifecycleEvent.setDescription(
+                request.getDescription()
+        );
+        lifecycleEvent.setCreatedAt(
+                LocalDateTime.now()
+        );
 
-        // Step 5: Save initial event
         lifecycleEvent =
-                lifecycleEventRepository.save(lifecycleEvent);
+                lifecycleEventRepository.save(
+                        lifecycleEvent
+                );
 
-        // Step 6: Process JOINER
         if ("JOINER".equals(eventType)) {
 
-            processJoiner(employee);
+            processJoiner(
+                    employee,
+                    lifecycleEvent
+            );
         }
 
-        // Step 7: Process LEAVER
         if ("LEAVER".equals(eventType)) {
 
-            processLeaver(employee);
+            processLeaver(
+                    employee,
+                    lifecycleEvent
+            );
         }
 
-        // Step 8: Complete event
         lifecycleEvent.setStatus("COMPLETED");
-        lifecycleEvent.setCompletedAt(LocalDateTime.now());
 
-        // Step 9: Save completed event
-        return lifecycleEventRepository.save(lifecycleEvent);
+        lifecycleEvent.setCompletedAt(
+                LocalDateTime.now()
+        );
+
+        lifecycleEvent =
+                lifecycleEventRepository.save(
+                        lifecycleEvent
+                );
+
+        // =====================================================
+        // AUDIT: LIFECYCLE EVENT COMPLETED
+        // =====================================================
+
+        auditEventService.createAuditEvent(
+                "LIFECYCLE",
+                "LIFECYCLE_EVENT",
+                lifecycleEvent.getId(),
+                eventType + "_PROCESSED",
+                eventType
+                        + " lifecycle event completed for employee "
+                        + employee.getId(),
+                "SYSTEM"
+        );
+
+        return lifecycleEvent;
     }
 
     // =========================================================
     // JOINER PROCESSING
     // =========================================================
 
-    private void processJoiner(Employee employee) {
+    private void processJoiner(
+            Employee employee,
+            LifecycleEvent lifecycleEvent) {
 
-        employee.setStatus(EmployeeStatus.ACTIVE);
+        EmployeeStatus previousStatus =
+                employee.getStatus();
+
+        employee.setStatus(
+                EmployeeStatus.ACTIVE
+        );
 
         employeeRepository.save(employee);
+
+        // Log only if status actually changed
+        if (previousStatus != EmployeeStatus.ACTIVE) {
+
+            auditEventService.createAuditEvent(
+                    "LIFECYCLE",
+                    "EMPLOYEE",
+                    employee.getId(),
+                    "EMPLOYEE_ACTIVATED",
+                    "Employee "
+                            + employee.getId()
+                            + " activated through JOINER event "
+                            + lifecycleEvent.getId(),
+                    "SYSTEM"
+            );
+        }
     }
 
     // =========================================================
@@ -127,7 +201,6 @@ public class LifecycleEventService {
     public LifecycleEvent processMoverLifecycle(
             MoverLifecycleRequest request) {
 
-        // Step 1: Find employee
         Employee employee = employeeRepository
                 .findById(request.getEmployeeId())
                 .orElseThrow(() ->
@@ -136,14 +209,12 @@ public class LifecycleEventService {
                         )
                 );
 
-        // Step 2: Store previous employee information
         String oldDepartment =
                 employee.getDepartment();
 
         String oldJobTitle =
                 employee.getJobTitle();
 
-        // Step 3: Create lifecycle event
         LifecycleEvent lifecycleEvent =
                 new LifecycleEvent();
 
@@ -169,80 +240,169 @@ public class LifecycleEventService {
                 LocalDateTime.now()
         );
 
-        // Step 4: Save initial lifecycle event
         lifecycleEvent =
                 lifecycleEventRepository.save(
                         lifecycleEvent
                 );
 
-        // Step 5: Update employee department
         employee.setDepartment(
                 request.getNewDepartment()
         );
 
-        // Step 6: Update employee job title
         employee.setJobTitle(
                 request.getNewJobTitle()
         );
 
-        // Step 7: Save updated employee
         employeeRepository.save(employee);
 
-        // Step 8: Complete lifecycle event
         lifecycleEvent.setStatus("COMPLETED");
 
         lifecycleEvent.setCompletedAt(
                 LocalDateTime.now()
         );
 
-        // Step 9: Save completed lifecycle event
-        return lifecycleEventRepository.save(
-                lifecycleEvent
+        lifecycleEvent =
+                lifecycleEventRepository.save(
+                        lifecycleEvent
+                );
+
+        // =====================================================
+        // AUDIT: EMPLOYEE UPDATED
+        // =====================================================
+
+        auditEventService.createAuditEvent(
+                "LIFECYCLE",
+                "EMPLOYEE",
+                employee.getId(),
+                "EMPLOYEE_MOVED",
+                "Employee "
+                        + employee.getId()
+                        + " moved from department "
+                        + oldDepartment
+                        + " to "
+                        + request.getNewDepartment()
+                        + " and job title "
+                        + oldJobTitle
+                        + " to "
+                        + request.getNewJobTitle(),
+                "SYSTEM"
         );
+
+        // =====================================================
+        // AUDIT: MOVER COMPLETED
+        // =====================================================
+
+        auditEventService.createAuditEvent(
+                "LIFECYCLE",
+                "LIFECYCLE_EVENT",
+                lifecycleEvent.getId(),
+                "MOVER_PROCESSED",
+                "MOVER lifecycle event completed for employee "
+                        + employee.getId(),
+                "SYSTEM"
+        );
+
+        return lifecycleEvent;
     }
 
     // =========================================================
     // LEAVER PROCESSING
     // =========================================================
 
-    private void processLeaver(Employee employee) {
+    private void processLeaver(
+            Employee employee,
+            LifecycleEvent lifecycleEvent) {
 
-        // Step 1: Deactivate employee
-        employee.setStatus(
-                EmployeeStatus.INACTIVE
-        );
+        // =====================================================
+        // DEACTIVATE EMPLOYEE
+        // =====================================================
 
-        employeeRepository.save(employee);
+        if (employee.getStatus() != EmployeeStatus.INACTIVE) {
 
-        // Step 2: Find all accounts owned by employee
+            employee.setStatus(
+                    EmployeeStatus.INACTIVE
+            );
+
+            employeeRepository.save(employee);
+
+            auditEventService.createAuditEvent(
+                    "LIFECYCLE",
+                    "EMPLOYEE",
+                    employee.getId(),
+                    "EMPLOYEE_DEACTIVATED",
+                    "Employee "
+                            + employee.getId()
+                            + " deactivated through LEAVER event "
+                            + lifecycleEvent.getId(),
+                    "SYSTEM"
+            );
+        }
+
         List<Account> accounts =
                 accountRepository.findByEmployeeId(
                         employee.getId()
                 );
 
-        // Step 3: Process every employee account
         for (Account account : accounts) {
 
-            // Deactivate account
-            account.setActive(false);
+            // =================================================
+            // DEACTIVATE ACCOUNT
+            // =================================================
 
-            accountRepository.save(account);
+            if (account.isActive()) {
 
-            // Step 4: Find entitlement assignments
+                account.setActive(false);
+
+                account =
+                        accountRepository.save(account);
+
+                auditEventService.createAuditEvent(
+                        "LIFECYCLE",
+                        "ACCOUNT",
+                        account.getId(),
+                        "ACCOUNT_DEACTIVATED",
+                        "Account "
+                                + account.getId()
+                                + " deactivated through LEAVER event "
+                                + lifecycleEvent.getId(),
+                        "SYSTEM"
+                );
+            }
+
             List<AccountEntitlement> assignments =
                     accountEntitlementRepository
                             .findByAccountId(
                                     account.getId()
                             );
 
-            // Step 5: Deactivate every assignment
-            for (AccountEntitlement assignment : assignments) {
+            for (AccountEntitlement assignment
+                    : assignments) {
 
-                assignment.setActive(false);
+                // Log only actual state changes
+                if (assignment.isActive()) {
 
-                accountEntitlementRepository.save(
-                        assignment
-                );
+                    assignment.setActive(false);
+
+                    assignment =
+                            accountEntitlementRepository.save(
+                                    assignment
+                            );
+
+                    auditEventService.createAuditEvent(
+                            "PROVISIONING",
+                            "ACCOUNT_ENTITLEMENT",
+                            assignment.getId(),
+                            "ENTITLEMENT_DEPROVISIONED",
+                            assignment
+                                    .getEntitlement()
+                                    .getEntitlementName()
+                                    + " deprovisioned from account "
+                                    + account.getId()
+                                    + " through LEAVER event "
+                                    + lifecycleEvent.getId(),
+                            "SYSTEM"
+                    );
+                }
             }
         }
     }
